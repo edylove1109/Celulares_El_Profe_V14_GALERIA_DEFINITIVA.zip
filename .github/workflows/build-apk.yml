@@ -1,0 +1,46 @@
+
+name: Construir APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar proyecto V14
+        shell: bash
+        run: |
+          set -e
+          rm -rf CelularesElProfeAndroid
+          unzip -q Celulares_El_Profe_V14_GITHUB.zip -d CelularesElProfeAndroid
+          test -f CelularesElProfeAndroid/settings.gradle.kts
+          test -f CelularesElProfeAndroid/app/src/main/java/com/celulareselprofe/app/MainActivity.kt
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Construir APK
+        working-directory: CelularesElProfeAndroid
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: Guardar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Celulares-El-Profe-APK
+          path: CelularesElProfeAndroid/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
