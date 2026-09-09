@@ -1,10 +1,9 @@
-
 name: Construir APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
@@ -14,29 +13,74 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Preparar proyecto V14
+      - name: Preparar proyecto actual
         shell: bash
         run: |
           set -e
+
+          echo "=== Archivos del repositorio ==="
+          ls -la
+
           rm -rf CelularesElProfeAndroid
-          unzip -q Celulares_El_Profe_V14_GITHUB.zip -d CelularesElProfeAndroid
+
+          # Buscar el ZIP más reciente de Celulares El Profe
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname 'Celulares_El_Profe_*.zip' | sort | tail -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No se encontró el ZIP del proyecto."
+            exit 1
+          fi
+
+          echo "Usando proyecto: $ZIP_FILE"
+
+          unzip -q "$ZIP_FILE" -d CelularesElProfeAndroid
+
+          # Si el ZIP trae una carpeta interna, localizar el proyecto real
+          if [ ! -f "CelularesElProfeAndroid/settings.gradle.kts" ]; then
+            PROJECT_DIR=$(find CelularesElProfeAndroid -name settings.gradle.kts -type f -print -quit | xargs dirname)
+
+            if [ -z "$PROJECT_DIR" ]; then
+              echo "ERROR: No se encontró settings.gradle.kts"
+              exit 1
+            fi
+
+            echo "Proyecto encontrado en: $PROJECT_DIR"
+
+            mkdir -p /tmp/proyecto
+            cp -a "$PROJECT_DIR"/. /tmp/proyecto/
+            rm -rf CelularesElProfeAndroid
+            mkdir CelularesElProfeAndroid
+            cp -a /tmp/proyecto/. CelularesElProfeAndroid/
+          fi
+
           test -f CelularesElProfeAndroid/settings.gradle.kts
+          test -f CelularesElProfeAndroid/app/build.gradle.kts
           test -f CelularesElProfeAndroid/app/src/main/java/com/celulareselprofe/app/MainActivity.kt
+
+          echo "=== Proyecto listo ==="
+          grep -n "versionCode\|versionName" CelularesElProfeAndroid/app/build.gradle.kts || true
 
       - name: Instalar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Instalar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: "8.9"
+
+      - name: Verificar versión
+        working-directory: CelularesElProfeAndroid
+        run: |
+          echo "=== Versión que se va a compilar ==="
+          grep -n "versionCode\|versionName" app/build.gradle.kts
 
       - name: Construir APK
         working-directory: CelularesElProfeAndroid
-        run: gradle :app:assembleDebug --no-daemon
+        run: |
+          gradle :app:assembleDebug --no-daemon
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
