@@ -15,24 +15,50 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Mostrar estructura
+        run: |
+          echo "=== RAIZ ==="
+          ls -la
+          echo "=== ARCHIVOS ==="
+          find . -maxdepth 3 -type f | sort | head -200
+
+      - name: Buscar proyecto Android
+        run: |
+          if [ -f "./gradlew" ]; then
+            echo "Proyecto encontrado en la raíz"
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f "./Celulares_El_Profe_V22_PUSH_REAL_SIN_BLAZE/gradlew" ]; then
+            echo "Proyecto encontrado dentro de carpeta V22"
+            echo "PROJECT_DIR=./Celulares_El_Profe_V22_PUSH_REAL_SIN_BLAZE" >> "$GITHUB_ENV"
+          elif [ -f "./Celulares_El_Profe_V22_PUSH_REAL_SIN_BLAZE_CORREGIDA/gradlew" ]; then
+            echo "Proyecto encontrado dentro de carpeta V22 corregida"
+            echo "PROJECT_DIR=./Celulares_El_Profe_V22_PUSH_REAL_SIN_BLAZE_CORREGIDA" >> "$GITHUB_ENV"
+          else
+            echo "ERROR: No se encontró gradlew"
+            find . -name gradlew -type f -print
+            exit 1
+          fi
 
       - name: Dar permisos a Gradle
-        run: chmod +x gradlew
+        run: chmod +x "$PROJECT_DIR/gradlew"
 
       - name: Limpiar proyecto
-        run: ./gradlew clean
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: ./gradlew clean --no-daemon
 
       - name: Generar APK
-        run: ./gradlew assembleDebug --stacktrace
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
           name: Celulares-El-Profe-APK-V22
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
