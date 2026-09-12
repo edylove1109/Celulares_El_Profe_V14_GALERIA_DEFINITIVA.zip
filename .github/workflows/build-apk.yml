@@ -38,7 +38,7 @@ jobs:
           set -e
           FILE="app/src/main/java/com/celulareselprofe/app/MainActivity.kt"
           if [ -f "$FILE" ]; then
-            sed -i '/PUSH_WORKER_URL/d' "$FILE"
+            sed -i 's/PUSH_WORKER_URL/""/g' "$FILE"
           fi
       - name: Verificar proyecto
         working-directory: ${{ env.PROJECT_DIR }}
