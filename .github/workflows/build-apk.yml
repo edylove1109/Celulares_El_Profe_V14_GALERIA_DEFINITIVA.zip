@@ -22,89 +22,86 @@ jobs:
         shell: bash
         run: |
           set -e
-
           echo "=== Contenido del repositorio ==="
           ls -lah
 
-          # Si el proyecto ya está descomprimido en la raíz
           if [ -f "settings.gradle.kts" ] && [ -f "app/build.gradle.kts" ]; then
             echo "Proyecto Android encontrado en la raíz."
             echo "PROJECT_DIR=." >> "$GITHUB_ENV"
             exit 0
           fi
 
-          # Buscar ZIP V22
           ZIP_FILE=$(find . -maxdepth 1 -type f -iname 'Celulares_El_Profe_V22*.zip' | sort | tail -n 1)
-
-          # Si no hay V22, buscar V21
           if [ -z "$ZIP_FILE" ]; then
             ZIP_FILE=$(find . -maxdepth 1 -type f -iname 'Celulares_El_Profe_V21*.zip' | sort | tail -n 1)
           fi
-
           if [ -z "$ZIP_FILE" ]; then
             echo "ERROR: No se encontró el ZIP V22/V21."
             exit 1
           fi
 
           echo "ZIP encontrado: $ZIP_FILE"
-
           rm -rf CelularesElProfeAndroid
           mkdir -p CelularesElProfeAndroid
-
           unzip -q "$ZIP_FILE" -d CelularesElProfeAndroid
 
-          echo "=== Buscando proyecto Android ==="
-
-          ROOT=$(find CelularesElProfeAndroid \
-            -type f \
-            -name settings.gradle.kts \
-            -print -quit | xargs -r dirname)
-
+          ROOT=$(find CelularesElProfeAndroid -type f -name settings.gradle.kts -print -quit | xargs -r dirname)
           if [ -z "$ROOT" ]; then
             echo "ERROR: El ZIP no contiene settings.gradle.kts"
             exit 1
           fi
-
           echo "Proyecto encontrado en: $ROOT"
-
           echo "PROJECT_DIR=$ROOT" >> "$GITHUB_ENV"
 
-      - name: Configurar Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
+      - name: Corregir referencia Kotlin V22
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
+        run: |
+          set -e
+          FILE="app/src/main/java/com/celulareselprofe/app/MainActivity.kt"
+          if [ -f "$FILE" ] && grep -q 'PUSH_WORKER_URL' "$FILE"; then
+            if ! grep -Eq '(const[[:space:]]+val|val|var)[[:space:]]+PUSH_WORKER_URL' "$FILE"; then
+              TMP=$(mktemp)
+              awk 'NR==1 {print; print "\nprivate const val PUSH_WORKER_URL = \"\""; next} {print}' "$FILE" > "$TMP"
+              mv "$TMP" "$FILE"
+              echo "Se agregó la constante faltante PUSH_WORKER_URL para permitir la compilación."
+            fi
+          fi
 
       - name: Verificar proyecto
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
           set -e
-
-          echo "=== Proyecto ==="
-          pwd
-          echo ""
-
-          echo "=== Archivos principales ==="
           test -f settings.gradle.kts
           test -f build.gradle.kts
           test -f app/build.gradle.kts
           test -f app/src/main/AndroidManifest.xml
-
           echo "Proyecto Android correcto."
+
+      - name: Configurar Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
 
       - name: Generar APK V22
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
-          set -e
+          set -o pipefail
+          echo "=== Generando APK V22 ==="
+          gradle :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/build-v22.log"
 
-          echo "=== Generando APK ==="
-
-          gradle :app:assembleDebug \
-            --no-daemon \
-            --stacktrace
+      - name: Guardar log de compilación
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: V22-log-compilacion
+          path: ${{ github.workspace }}/build-v22.log
+          if-no-files-found: warn
 
       - name: Subir APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Celulares-El-Profe-APK-V22
